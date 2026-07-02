@@ -1,6 +1,7 @@
 import aiohttp
 import asyncio
 import urllib
+from http import HTTPStatus
 
 from . import app
 from .constants import DOWNLOAD_LINK_URL, REQUEST_UPLOAD_URL
@@ -64,7 +65,7 @@ async def upload_file_and_get_location(session, file):
                 'error': 'Нет href в ответе'
             }
     async with session.put(data=file.read(), url=upload_url) as response:
-        if response.status != 201:
+        if response.status != HTTPStatus.CREATED:
             return {
                 'filename': file.filename,
                 'url': None, 'error':

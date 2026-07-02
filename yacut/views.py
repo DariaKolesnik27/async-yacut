@@ -1,10 +1,9 @@
-from flask import abort, flash, redirect, render_template
+from flask import flash, redirect, render_template
 
-from . import app, db
+from . import app
 from .disk import async_upload_files_to_disk
 from .forms import FilesForm, URLMapForm
 from .models import URLMap
-from .utils import get_unique_short_id
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -20,23 +19,15 @@ def index_view():
 
     form = URLMapForm()
     if form.validate_on_submit():
-        link = form.custom_id.data
-        if link and (
-            URLMap.query.filter_by(short=link).first() is not None
-            or link.lower() == "files"
-        ):
-            flash('Предложенный вариант короткой ссылки уже существует.')
+        custom_id = form.custom_id.data
+        url = form.original_link.data
+        try:
+            urlmap = URLMap.create_url({'url': url, 'custom_id': custom_id})
+            flash('Ваша новая ссылка готова:')
+            return render_template('index.html', form=form, urlmap=urlmap)
+        except ValueError as e:
+            flash(str(e))
             return render_template('index.html', form=form)
-        if not link:
-            link = get_unique_short_id()
-        urlmap = URLMap(
-            original=form.original_link.data,
-            short=link
-        )
-        db.session.add(urlmap)
-        db.session.commit()
-        flash('Ваша новая ссылка готова:')
-        return render_template('index.html', form=form, urlmap=urlmap)
     return render_template('index.html', form=form)
 
 
@@ -61,15 +52,9 @@ async def file_view():
         uploaded_files = result.get('success')
         if uploaded_files:
             for file in uploaded_files:
-                url = get_unique_short_id()
-                urlmap = URLMap(
-                    original=file['url'],
-                    short=url
-                )
-                db.session.add(urlmap)
-                db.session.commit()
+                urlmap = URLMap.create_url({'url': file['url']})
                 files_list.append(
-                    {'filename': file['filename'], 'short_id': url}
+                    {'filename': file['filename'], 'short_id': urlmap.short}
                 )
         if errors:
             for error in errors:
@@ -85,7 +70,5 @@ async def file_view():
 def redirect_view(short_id):
     """Редирект по короткой ссылке."""
 
-    urlmap = URLMap.query.filter_by(short=short_id).first()
-    if urlmap:
-        return redirect(urlmap.original)
-    abort(404)
+    urlmap = URLMap.query.filter_by(short=short_id).first_or_404()
+    return redirect(urlmap.original)
